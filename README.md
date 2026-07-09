@@ -1,8 +1,8 @@
-# CleverTap MCP — Univest Analytics
+# CleverTap MCP
 
 An [MCP](https://modelcontextprotocol.io) server that exposes the **CleverTap analytics REST API** as tools your AI agent (Claude Code, Cursor, etc.) can call directly. Ask questions about users, events, retention, and uninstalls in plain English — the agent pulls live numbers from CleverTap for you.
 
-> **Univest team:** this queries the same CleverTap account that powers the app's analytics. Credentials are supplied via environment variables — **never** commit them.
+Works with **any CleverTap account** — bring your own account ID and passcode and use it in any project. Credentials are supplied via environment variables and are **never** committed.
 
 ---
 
