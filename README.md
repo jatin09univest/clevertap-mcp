@@ -1,182 +1,123 @@
-# clevertap-mcp
+# CleverTap MCP — Univest Analytics
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for the [CleverTap](https://clevertap.com) REST API. Exposes CleverTap's user profiles, events, campaigns, and reports as tools that any MCP-compatible AI assistant (Claude, Cursor, etc.) can call directly.
+An [MCP](https://modelcontextprotocol.io) server that exposes the **CleverTap analytics REST API** as tools your AI agent (Claude Code, Cursor, etc.) can call directly. Ask questions about users, events, retention, and uninstalls in plain English — the agent pulls live numbers from CleverTap for you.
+
+> **Univest team:** this queries the same CleverTap account that powers the app's analytics. Credentials are supplied via environment variables — **never** commit them.
 
 ---
 
-## Features
+## Why use this
 
-- **Multi-project** — manage multiple CleverTap accounts from a single server instance
-- **Guided setup** — if no project is configured, `clevertap_configure` walks you through the process
-- **Full API coverage** — events, profiles, campaigns, and reports
-- **Async polling** — long-running operations (event/profile counts) are polled automatically
+| Without the MCP | With the MCP |
+|---|---|
+| Log into the CleverTap dashboard, click through Events → Trends → filters | Ask *"what's the DAU trend for the last 14 days?"* and get numbers |
+| Copy/paste event names, guess date formats | Agent knows the tool schemas and formats requests correctly |
+| Export CSVs and eyeball them | Agent computes, compares, and explains the data inline |
+| Analytics lives in one person's head | Any teammate with the repo + passcode can query it |
+
+**Concretely, you can:**
+- 📊 Pull **event counts / trends** (`Charged`, `App Launched`, custom events) over any date range
+- 👤 Look up a **single user's full profile** by CleverTap identity
+- 🔁 List **who performed an event** (e.g. everyone who `App Uninstalled` last week)
+- 📉 Get **uninstall reports** and **DAU** to track retention
+- 🏆 See **top events** by volume to understand what users actually do
+- 💬 Do all of the above **conversationally**, chained with your own analysis
 
 ---
 
 ## Tools
 
-### Meta
-| Tool | Description |
-|------|-------------|
-| `clevertap_configure` | Guided setup to add a project or generate the `CLEVERTAP_PROJECTS` config |
-| `clevertap_list_projects` | List all configured projects and their regions |
+| Tool | What it does |
+|---|---|
+| `clevertap_get_dau` | Daily Active Users for a date range |
+| `clevertap_get_top_events` | Top events by occurrence count for a date range |
+| `clevertap_get_event_count` | Total count of an event in a range, optionally filtered by property conditions |
+| `clevertap_get_event_trend` | Day-by-day trend for a single event |
+| `clevertap_get_uninstall_report` | App uninstall counts per day |
+| `clevertap_get_profile` | Full profile of one user by CleverTap identity |
+| `clevertap_get_profiles_by_event` | Profiles of users who performed an event in a range (paginated via cursor) |
 
-### Events
-| Tool | Description |
-|------|-------------|
-| `clevertap_upload_events` | Upload one or more events for a user |
-| `clevertap_get_events` | Query event data with filters |
-| `clevertap_get_events_cursor` | Fetch the next page of event results via cursor |
-| `clevertap_get_event_count` | Get the total count of an event (with async polling) |
-
-### Profiles
-| Tool | Description |
-|------|-------------|
-| `clevertap_upload_profiles` | Create or update user profiles |
-| `clevertap_get_profile` | Look up a single user by identity, email, or objectId |
-| `clevertap_get_profiles_by_event` | Get profiles of users who performed an event |
-| `clevertap_get_profiles_cursor` | Fetch the next page of profile results via cursor |
-| `clevertap_delete_profile` | Delete a user profile |
-| `clevertap_upload_device_token` | Register a push token for a user |
-| `clevertap_get_profile_count` | Count profiles matching a segment |
-| `clevertap_demerge_profiles` | Split merged profiles apart |
-| `clevertap_subscribe` | Subscribe/unsubscribe a user to channels |
-| `clevertap_disassociate_phone` | Remove a phone number from a profile |
-
-### Campaigns
-| Tool | Description |
-|------|-------------|
-| `clevertap_get_campaigns` | List campaigns within a date range |
-| `clevertap_get_campaign_report` | Get delivery and engagement stats for a campaign |
-| `clevertap_stop_campaign` | Stop a running campaign |
-| `clevertap_create_campaign` | Create and launch a campaign |
-
-### Reports
-| Tool | Description |
-|------|-------------|
-| `clevertap_get_message_report` | Message-level delivery report |
-| `clevertap_get_top_property_count` | Top property value counts for an event |
-| `clevertap_get_event_trend` | Daily/weekly/monthly trend for an event |
-| `clevertap_get_dau` | Daily active users trend |
-| `clevertap_get_uninstall_report` | Uninstall trend report |
-| `clevertap_get_real_time_counts` | Real-time active user counts |
-
-### Generic
-| Tool | Description |
-|------|-------------|
-| `clevertap_request` | Make any raw REST API request |
-| `clevertap_poll` | Poll a pending async request by `req_id` |
-
-### Web / Browser
-| Tool | Description |
-|------|-------------|
-| `clevertap_web_login` | Open a Chromium window and capture the dashboard session cookie + CSRF token after manual login (supports SSO and 2FA) |
-| `clevertap_web_session_status` | Check whether a web session has been captured for a project, and when it was obtained |
-| `clevertap_web_request` | Make an authenticated request to any CleverTap dashboard endpoint using the captured session |
-| `clevertap_get_campaigns_ui` | List campaigns from the dashboard UI API — richer data than the REST API (status, sent, impressions, clicks, edit URL) |
-| `clevertap_send_test_push` | Send a test push notification to a specific device token. Accepts the push token from `clevertap_get_profile` (`platformInfo[].push_token`), the target platform (`ios`/`android`), the push channel name, and an optional deep link URL. |
-
-> **Prerequisite for web tools:** install the Playwright Chromium binary once after `npm install`:
-> ```bash
-> npx playwright install chromium
-> ```
+Dates use `YYYYMMDD` format (e.g. `20260101`). The agent handles this for you — just say "last 7 days".
 
 ---
 
-## Installation
+## Setup
 
-```bash
-git clone https://github.com/your-org/clevertap-mcp.git
-cd clevertap-mcp
-npm install
-npx playwright install chromium   # required for web/browser tools
-npm run build
+### 1. Requirements
+- Python 3.10+
+- A CleverTap account **ID** and **passcode** (Dashboard → Settings → Engagement → API)
+
+### 2. Clone & install
+```sh
+git clone -b jatin https://github.com/jatin09univest/clevertap-mcp.git ~/clevertap-mcp
+cd ~/clevertap-mcp
+pip install -r requirements.txt
 ```
 
----
-
-## Configuration
-
-The server reads project credentials from the `CLEVERTAP_PROJECTS` environment variable — a JSON array of project objects:
-
-```json
-[
-  {
-    "name": "My App - Production",
-    "account_id": "XXX-XXX-XXXX",
-    "passcode": "YYY-YYY-YYYY",
-    "region": "us1"
-  },
-  {
-    "name": "My App - Staging",
-    "account_id": "AAA-AAA-AAAA",
-    "passcode": "BBB-BBB-BBBB",
-    "region": "us1"
-  }
-]
+### 3. Register with Claude Code
+```sh
+claude mcp add clevertap python3 ~/clevertap-mcp/server.py \
+  -e CLEVERTAP_ACCOUNT_ID=YOUR_ACCOUNT_ID \
+  -e CLEVERTAP_PASSCODE=YOUR_PASSCODE
 ```
 
-**Supported regions:** `in1`, `us1`, `eu1`, `sg1`, `aps3`, `mec1`
-
-### Single-project fallback
-
-You can also use individual environment variables for a single project:
-
-```bash
-CLEVERTAP_ACCOUNT_ID=XXX-XXX-XXXX
-CLEVERTAP_PASSCODE=YYY-YYY-YYYY
-CLEVERTAP_REGION=us1
-```
-
----
-
-## Adding to Claude Desktop
-
-In your `claude_desktop_config.json` (or `~/.claude.json`):
-
+Or add it to a project's `.mcp.json` (shared via git — safe because secrets stay in your shell):
 ```json
 {
   "mcpServers": {
     "clevertap": {
-      "command": "node",
-      "args": ["/absolute/path/to/clevertap-mcp/dist/index.js"],
+      "type": "stdio",
+      "command": "python3",
+      "args": ["/absolute/path/to/clevertap-mcp/server.py"],
       "env": {
-        "CLEVERTAP_PROJECTS": "[{\"name\":\"My App\",\"account_id\":\"XXX-XXX-XXXX\",\"passcode\":\"YYY-YYY-YYYY\",\"region\":\"us1\"}]"
+        "CLEVERTAP_ACCOUNT_ID": "${CLEVERTAP_ACCOUNT_ID}",
+        "CLEVERTAP_PASSCODE": "${CLEVERTAP_PASSCODE}"
       }
     }
   }
 }
 ```
 
-> **Important:** `CLEVERTAP_PROJECTS` must be a serialized JSON **string** (not a native JSON object) inside the `env` block.
+### Environment variables
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `CLEVERTAP_ACCOUNT_ID` | ✅ | — | From CleverTap → Settings → Engagement |
+| `CLEVERTAP_PASSCODE` | ✅ | — | Keep secret. Share via 1Password/Slack DM, never git |
+| `CLEVERTAP_BASE_URL` | ❌ | `https://eu1.api.clevertap.com` | Change region if your account isn't on EU (e.g. `https://us1.api.clevertap.com`) |
+
+The server **refuses to start** if the ID or passcode is missing.
 
 ---
 
-## Development
+## Usage examples
 
-```bash
-npm run build      # compile TypeScript → dist/
-npm run dev        # watch mode
-npm start          # run compiled server
-```
+Once registered, just talk to your agent:
 
-### Project structure
+- *"What was our DAU each day last week?"* → `clevertap_get_dau`
+- *"How many `Charged` events fired in June 2026?"* → `clevertap_get_event_count`
+- *"Show the daily trend for `App Launched` over the last 14 days."* → `clevertap_get_event_trend`
+- *"Which users uninstalled in the last 3 days?"* → `clevertap_get_profiles_by_event`
+- *"Pull the full profile for CleverTap identity `98765`."* → `clevertap_get_profile`
+- *"What are our top 10 events this month?"* → `clevertap_get_top_events`
 
-```
-src/
-  index.ts          # MCP server entry point, project config, tool registration
-  client.ts         # CleverTap REST API HTTP client
-  tools/
-    events.ts       # Event upload and query tools
-    profiles.ts     # Profile management tools
-    campaigns.ts    # Campaign tools
-    reports.ts      # Analytics and report tools
-    generic.ts      # Raw request / poll tools
-    web.ts          # Browser session tools via Playwright (login, campaigns UI, test push)
-```
+The agent picks the right tool, formats the dates, calls CleverTap, and explains the result.
 
 ---
 
-## License
+## Security
 
-MIT
+- 🔒 **No credentials in this repo.** They come from env vars only; the server errors out without them.
+- 🚫 Never paste the passcode into code, chat logs, or commits — it grants full access to your CleverTap account.
+- 🔑 Rotate the passcode in the CleverTap dashboard if it's ever exposed.
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `CleverTap credentials missing` on start | Set `CLEVERTAP_ACCOUNT_ID` and `CLEVERTAP_PASSCODE` in the MCP `env` block |
+| `401 Unauthorized` from CleverTap | Wrong passcode, or account is on a different region — check `CLEVERTAP_BASE_URL` |
+| Empty results | Event name is case-sensitive; confirm it matches the dashboard exactly |
+| `ModuleNotFoundError: mcp` / `httpx` | Run `pip install -r requirements.txt` |
